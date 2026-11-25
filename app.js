@@ -583,7 +583,8 @@
     try{
       const workbooks=await Promise.all(selected.map(async file=>readWorkbook(await file.arrayBuffer()))),sheets=workbooks.flat();
       const data=extractData(sheets);
-      data.mdfRows=extractMdfRows(sheets);
+      const mdfTitle=[data.model,data.size,data.productType,'MDF'].filter(Boolean).join(' ').slice(0,40);
+      data.mdfRows=extractMdfRows(sheets).map(row=>{const titledRow=[...row];titledRow[2]=mdfTitle;titledRow[3]=String(mdfTitle.length);return titledRow;});
       data.inhouseHasMdf=true;currentModel=data.model;currentData=data;removedTileNames.clear();currentGroups=makeGroups(data);render(data,currentGroups);renderHardware(data);renderInhouse(data,activeTileVariants());renderChild(data);status.textContent='';
     }
     catch(error){currentGroups=[];status.classList.add('error');status.textContent=error?.message||'Unable to process this workbook.';}
