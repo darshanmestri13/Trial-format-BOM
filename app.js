@@ -144,7 +144,7 @@
     for(const rows of sheets){
       for(let headerRow=0;headerRow<rows.length;headerRow++){
         const labels=Array.from(rows[headerRow]||[],normalizeHeader);
-        const indexes={productType:labels.findIndex(value=>value==='product type'),description:labels.findIndex(value=>value.startsWith('inhouse material description')),plant:labels.findIndex(value=>value==='plant'),uom:labels.findIndex(value=>value==='base uom'),baseQty:labels.findIndex(value=>value==='base qty'),altBom:labels.findIndex(value=>value==='alt bom'),code:labels.findIndex(value=>value==='component material code'),material:labels.findIndex(value=>value==='component material description'),quantity:labels.findIndex(value=>value.startsWith('component quantity')),componentUom:labels.findIndex(value=>value==='uom'),finalPlant:labels.findIndex(value=>value.startsWith('final consumption')),owningPlant:labels.findIndex(value=>value.startsWith('product owning plant'))};
+        const indexes={productType:labels.findIndex(value=>value==='product type'),description:labels.findIndex(value=>value==='inhouse material description'||value==='material description'),plant:labels.findIndex(value=>value==='plant'),uom:labels.findIndex(value=>value==='base uom'),baseQty:labels.findIndex(value=>value==='base qty'),altBom:labels.findIndex(value=>value==='alt bom'||value==='alternate bom'),code:labels.findIndex(value=>value==='component material code'||value==='component code'),material:labels.findIndex(value=>value==='component material description'||value==='component description'),quantity:labels.findIndex(value=>value.startsWith('component quantity')),componentUom:labels.findIndex(value=>value==='uom'),finalPlant:labels.findIndex(value=>value.startsWith('final consumption')),owningPlant:labels.findIndex(value=>value.startsWith('product owning plant'))};
         if([indexes.productType,indexes.description,indexes.plant,indexes.code,indexes.material].some(index=>index<0))continue;
         const extracted=[];
         for(let rowIndex=headerRow+1;rowIndex<rows.length;rowIndex++){
@@ -157,7 +157,7 @@
         return extracted;
       }
     }
-    throw new Error('The MDF BOM workbook needs the Inhouse BOM columns, including Product Type, Inhouse Material Description, Component Material Code, and Component Material Description.');
+    return [];
   }
   function inhouseReserveCount(data){return data?.mdfRows?.length?data.mdfRows.length+1:7;}
   function extractData(sheets){
@@ -581,16 +581,9 @@
     const selected=[...files].filter(Boolean);if(!selected.length)return;
     const status=$('status');$('result').classList.remove('visible');status.classList.remove('error');status.textContent=`Reading ${selected.length} Excel workbook${selected.length===1?'':'s'}…`;
     try{
-      const parsed=await Promise.all(selected.map(async file=>({file,sheets:await readWorkbook(await file.arrayBuffer())})));
-      const dataWorkbooks=[],mdfWorkbooks=[];
-      for(const workbook of parsed){
-        if(/\bmdf\b/i.test(workbook.file.name)){mdfWorkbooks.push(workbook);continue;}
-        try{extractMdfRows(workbook.sheets);mdfWorkbooks.push(workbook);}
-        catch{dataWorkbooks.push(workbook);}
-      }
-      if(!dataWorkbooks.length)throw new Error('Select at least one BOM Data workbook. MDF BOM files can be selected in the same file picker.');
-      const data=extractData(dataWorkbooks.flatMap(workbook=>workbook.sheets));
-      data.mdfRows=mdfWorkbooks.length?mdfWorkbooks.flatMap(workbook=>extractMdfRows(workbook.sheets)):[];
+      const workbooks=await Promise.all(selected.map(async file=>readWorkbook(await file.arrayBuffer()))),sheets=workbooks.flat();
+      const data=extractData(sheets);
+      data.mdfRows=extractMdfRows(sheets);
       data.inhouseHasMdf=true;currentModel=data.model;currentData=data;removedTileNames.clear();currentGroups=makeGroups(data);render(data,currentGroups);renderHardware(data);renderInhouse(data,activeTileVariants());renderChild(data);status.textContent='';
     }
     catch(error){currentGroups=[];status.classList.add('error');status.textContent=error?.message||'Unable to process this workbook.';}
