@@ -139,9 +139,9 @@
     return items;
   }
   function extractMdfRows(sheets,data){
-    const normalizeMaterialCode=value=>{const code=String(value??'').trim().replace(/,/g,'');if(/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)[eE][+-]?\\d+$/.test(code)){const numeric=Number(code);if(Number.isSafeInteger(numeric))return String(numeric);}return code.replace(/^(\\d+)\\.0+$/,'$1');};
+    const normalizeMaterialCode=value=>{const code=String(value??'').trim().replace(/,/g,'');if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(code)){const numeric=Number(code);if(Number.isSafeInteger(numeric))return String(numeric);}return code.replace(/^(\d+)\.0+$/,'$1');};
     const readEmbeddedMdf=rows=>{
-      const markerRow=rows.findIndex(row=>(row||[]).some(value=>/^\\s*MDF\\s+BOM\\s*$/i.test(String(value??''))));
+      const markerRow=rows.findIndex(row=>(row||[]).some(value=>/^\s*MDF\s+BOM\s*$/i.test(String(value??''))));
       if(markerRow<0)return [];
       let indexes=null;
       for(let rowIndex=0;rowIndex<markerRow;rowIndex++){
@@ -156,7 +156,7 @@
       const output=[];let started=false;
       for(let rowIndex=markerRow+1;rowIndex<rows.length;rowIndex++){
         const source=rows[rowIndex]||[];
-        if(source.some(value=>/^\\s*MDF\\s+BOM\\s*$/i.test(String(value??''))))break;
+        if(source.some(value=>/^\s*MDF\s+BOM\s*$/i.test(String(value??''))))break;
         const get=(index,fallback)=>String(source[index>=0?index:fallback]??'').trim();
         const code=normalizeMaterialCode(get(indexes?.code??-1,3));
         const material=get(indexes?.material??-1,4);
@@ -212,7 +212,7 @@
   function activeTileVariants(){return currentGroups.map(group=>[group.name,tileCodes.get(group.name)]).filter(([,shortForm])=>Boolean(shortForm));}
   function componentValues(item,{allowQtyFallback=true}={}){
     if(!item)return {partNumber:'',material:'',quantity:'',uom:''};
-    const isNumber=value=>/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(String(value??'').trim().replace(/,/g,''));
+    const isNumber=value=>/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(value??'').trim().replace(/,/g,''));
     const rawQuantity=item.quantity??item.qty??'';
     const quantity=isNumber(item.nesting)?item.nesting.trim():allowQtyFallback&&isNumber(rawQuantity)?String(rawQuantity).trim():'';
     let uom=String(item.uom??'').trim();if(!uom||/^(?:-|hardware bom|child bom)$/i.test(uom))uom=/nut/i.test(`${item.partName} ${item.material}`)?'N':'';
@@ -249,8 +249,8 @@
     const tileCutMatch=tileSource?.description.match(/(\d{3,4})\s*[x×]\s*(\d{3,4})/i),tileCutSize=tileCutMatch?`${tileCutMatch[1]}x${tileCutMatch[2]}`:'';
     const pasteEntries=inhouseTagged.filter(entry=>/araldite|pasting|adhesive/i.test(entry.text));
     const hasComponentData=entry=>Boolean(entry.item.partNumber||entry.item.material||entry.item.description);
-    const isPowderEntry=entry=>/powder|\\bpow\\b|\\bdiesel\\b|coating/i.test(entry.text);
-    const frameEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!isPowderEntry(entry)&&(/^2[a-z]/i.test(entry.item.serial)||/\\bleg\\b|top plate|side sheet|side cover|square rod/i.test(entry.text)));
+    const isPowderEntry=entry=>/powder|\bpow\b|\bdiesel\b|coating/i.test(entry.text);
+    const frameEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!isPowderEntry(entry)&&(/^2[a-z]/i.test(entry.item.serial)||/\bleg\b|top plate|side sheet|side cover|square rod/i.test(entry.text)));
     const powderEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&isPowderEntry(entry));
     const excluded=new Set([...nutEntries,...tileEntries,...pasteEntries,...frameEntries,...powderEntries]);
     const genericEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!excluded.has(entry)&&!/\\bmdf\\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
@@ -358,8 +358,8 @@
     return /\bchild\s*bom\b/i.test(content)||normalized(content).includes('polypropylene leg bush');
   }
   function hasChildBomMarker(item){return Object.values(item||{}).some(value=>/\bchild\s*bom\b/i.test(String(value??'')));}
-  function childBoxNumber(item){const match=String(item?.serial||'').match(/^B\\s*(\\d+)$/i);return match?Number(match[1]):0;}
-  function childItemBoxNumber(item){const text=normalized(item?.nesting||''),group=text.match(/\\bgroup\\s*(\\d+)\\b/);return group?Number(group[1]):childBoxNumber(item)||1;}
+  function childBoxNumber(item){const match=String(item?.serial||'').match(/^B\s*(\d+)$/i);return match?Number(match[1]):0;}
+  function childItemBoxNumber(item){const text=normalized(item?.nesting||''),group=text.match(/\bgroup\s*(\d+)\b/);return group?Number(group[1]):childBoxNumber(item)||1;}
   function childInhouseRowNumber(groupIndex,rowIndex){let row=2+inhouseReserveCount(currentData);for(let index=0;index<groupIndex;index++)row+=currentInhouseGroups[index].rows.length+1;return row+rowIndex;}
   function childInhouseRouteForItem(item){
     const partCode=String(item?.partNumber||'').trim(),material=normalized(item?.material||'');
