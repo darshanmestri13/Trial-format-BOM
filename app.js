@@ -141,14 +141,14 @@
   function extractMdfRows(sheets,data){
     const normalizeMaterialCode=value=>{const code=String(value??'').trim().replace(/,/g,'');if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(code)){const numeric=Number(code);if(Number.isSafeInteger(numeric))return String(numeric);}return code.replace(/^(\d+)\.0+$/,'$1');};
     const readEmbeddedMdf=rows=>{
-      const markerRow=rows.findIndex(row=>(row||[]).some(value=>/^\s*MDF\s+BOM\s*$/i.test(String(value??''))));
+      const markerRow=rows.findIndex(row=>(row||[]).some(value=>normalized(value).includes('mdf bom')));
       if(markerRow<0)return [];
       let indexes=null;
       for(let rowIndex=0;rowIndex<markerRow;rowIndex++){
         const labels=(rows[rowIndex]||[]).map(normalized);
-        const code=labels.findIndex(value=>/^(?:part number|part no|component material code)$/.test(value));
+        const code=labels.findIndex(value=>/^(?:part number|part no|component material code|component code|material code)$/.test(value));
         const material=labels.findIndex(value=>value==='material'||value==='component material description');
-        const quantity=labels.findIndex(value=>value.startsWith('component quantity')||value==='nesting');
+        const quantity=labels.findIndex(value=>value.startsWith('component quantity')||value==='nesting'||value.includes('quantity nesting'));
         const qty=labels.findIndex(value=>/^(?:qty|quantity)$/.test(value));
         const uom=labels.findIndex(value=>/^(?:uom|unit of measure)$/.test(value));
         if(code>=0&&material>=0){indexes={code,material,quantity,qty,uom};break;}
