@@ -253,7 +253,7 @@
     const frameEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!isPowderEntry(entry)&&(/^2[a-z]/i.test(entry.item.serial)||/\bleg\b|top plate|side sheet|side cover|square rod/i.test(entry.text)));
     const powderEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&isPowderEntry(entry));
     const excluded=new Set([...nutEntries,...tileEntries,...pasteEntries,...frameEntries,...powderEntries]);
-    const genericEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!excluded.has(entry)&&!/\\bmdf\\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
+    const genericEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!excluded.has(entry)&&!/\bmdf\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
     const packagingRelatedEntries=genericEntries.filter(entry=>/packag|plywood|plyboard|crate|corrugated|carton|stretch|bubble|foam|thermocol|epe|bopp|tape|ldpe|polyethylene|polythene|wrap|film|\bnails?\b|\bbox\b/i.test(entry.text));
     const packagingEntries=packagingRelatedEntries.filter(entry=>/plywood|plyboard|crate|corrugated/i.test(entry.text));
     const otherEntries=genericEntries.filter(entry=>!packagingRelatedEntries.includes(entry));
