@@ -156,7 +156,7 @@
       const output=[];let started=false;
       for(let rowIndex=markerRow+1;rowIndex<rows.length;rowIndex++){
         const source=rows[rowIndex]||[];
-        if(source.some(value=>/^\s*MDF\s+BOM\s*$/i.test(String(value??''))))break;
+        if(source.some(value=>normalized(value).includes('mdf bom')))break;
         const get=(index,fallback)=>String(source[index>=0?index:fallback]??'').trim();
         const code=normalizeMaterialCode(get(indexes?.code??-1,3));
         const material=get(indexes?.material??-1,4);
