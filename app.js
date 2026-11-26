@@ -171,22 +171,6 @@
       return output;
     };
     for(const rows of sheets){const embedded=readEmbeddedMdf(rows);if(embedded.length)return embedded;}
-    for(const rows of sheets){
-      for(let headerRow=0;headerRow<rows.length;headerRow++){
-        const labels=Array.from(rows[headerRow]||[],normalized);
-        const indexes={productType:labels.findIndex(value=>value==='product type'),description:labels.findIndex(value=>value==='inhouse material description'||value==='material description'),plant:labels.findIndex(value=>value==='plant'),uom:labels.findIndex(value=>value==='base uom'),baseQty:labels.findIndex(value=>value==='base qty'),altBom:labels.findIndex(value=>value==='alt bom'||value==='alternate bom'),code:labels.findIndex(value=>value==='component material code'||value==='component code'),material:labels.findIndex(value=>value==='component material description'||value==='component description'),quantity:labels.findIndex(value=>value.startsWith('component quantity')),componentUom:labels.findIndex(value=>value==='uom'),finalPlant:labels.findIndex(value=>value.startsWith('final consumption')),owningPlant:labels.findIndex(value=>value.startsWith('product owning plant'))};
-        if([indexes.productType,indexes.description,indexes.plant,indexes.code,indexes.material].some(index=>index<0))continue;
-        const extracted=[];
-        for(let rowIndex=headerRow+1;rowIndex<rows.length;rowIndex++){
-          const source=rows[rowIndex]||[],value=index=>index<0?'':String(source[index]??'').trim(),materialCode=normalizeMaterialCode(source[indexes.code]);
-          const hasMainRowData=[indexes.productType,indexes.description,indexes.plant,indexes.code,indexes.material,indexes.quantity,indexes.componentUom].some(index=>value(index));
-          if(!hasMainRowData)break;
-          const description=value(indexes.description);
-          extracted.push([value(indexes.productType),'',description,String(description.length),'MTN3',value(indexes.uom)||'N',value(indexes.baseQty)||'1',value(indexes.altBom)||'1',materialCode,value(indexes.material),formatComponentQuantity(value(indexes.quantity)),value(indexes.componentUom),value(indexes.finalPlant)||'MKA7',value(indexes.owningPlant)||'MKA7']);
-        }
-        if(extracted.length)return extracted;
-      }
-    }
     return [];
   }
   function inhouseReserveCount(data){return data?.mdfRows?.length?data.mdfRows.length+1:7;}
