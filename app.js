@@ -138,25 +138,39 @@
     }
     return items;
   }
-  function extractMdfRows(sheets){
-    const normalizeHeader=value=>normalized(value).replace(/\b40 character limit\b/g,'40 character limit');
+  function extractMdfRows(sheets,data){
     const normalizeMaterialCode=value=>{const code=String(value??'').trim().replace(/,/g,'');if(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+$/.test(code)){const numeric=Number(code);if(Number.isSafeInteger(numeric))return String(numeric);}return code.replace(/^(\d+)\.0+$/,'$1');};
-    for(const rows of sheets){
-      for(let headerRow=0;headerRow<rows.length;headerRow++){
-        const labels=Array.from(rows[headerRow]||[],normalizeHeader);
-        const indexes={productType:labels.findIndex(value=>value==='product type'),description:labels.findIndex(value=>value==='inhouse material description'||value==='material description'),plant:labels.findIndex(value=>value==='plant'),uom:labels.findIndex(value=>value==='base uom'),baseQty:labels.findIndex(value=>value==='base qty'),altBom:labels.findIndex(value=>value==='alt bom'||value==='alternate bom'),code:labels.findIndex(value=>value==='component material code'||value==='component code'),material:labels.findIndex(value=>value==='component material description'||value==='component description'),quantity:labels.findIndex(value=>value.startsWith('component quantity')),componentUom:labels.findIndex(value=>value==='uom'),finalPlant:labels.findIndex(value=>value.startsWith('final consumption')),owningPlant:labels.findIndex(value=>value.startsWith('product owning plant'))};
-        if([indexes.productType,indexes.description,indexes.plant,indexes.code,indexes.material].some(index=>index<0))continue;
-        const extracted=[];
-        for(let rowIndex=headerRow+1;rowIndex<rows.length;rowIndex++){
-          const source=rows[rowIndex]||[],value=index=>index<0?'':String(source[index]??'').trim(),materialCode=normalizeMaterialCode(source[indexes.code]);
-          const hasMainRowData=[indexes.productType,indexes.description,indexes.plant,indexes.code,indexes.material,indexes.quantity,indexes.componentUom].some(index=>value(index));
-          if(!hasMainRowData)break;
-          const row=[value(indexes.productType),'',value(indexes.description),String(value(indexes.description).length),value(indexes.plant),value(indexes.uom)||'N',value(indexes.baseQty)||'1',value(indexes.altBom)||'1',materialCode,value(indexes.material),formatComponentQuantity(value(indexes.quantity)),value(indexes.componentUom),value(indexes.finalPlant)||'MKA7',value(indexes.owningPlant)||'MKA7'];
-          extracted.push(row);
-        }
-        return extracted;
+    const readEmbeddedMdf=rows=>{
+      const markerRow=rows.findIndex(row=>(row||[]).some(value=>normalized(value).includes('mdf bom')));
+      if(markerRow<0)return [];
+      let indexes=null;
+      for(let rowIndex=0;rowIndex<markerRow;rowIndex++){
+        const labels=(rows[rowIndex]||[]).map(normalized);
+        const code=labels.findIndex(value=>/^(?:part number|part no|component material code|component code|material code)$/.test(value));
+        const material=labels.findIndex(value=>value==='material'||value==='component material description');
+        const quantity=labels.findIndex(value=>value.startsWith('component quantity')||value==='nesting'||value.includes('quantity nesting'));
+        const qty=labels.findIndex(value=>/^(?:qty|quantity)$/.test(value));
+        const uom=labels.findIndex(value=>/^(?:uom|unit of measure)$/.test(value));
+        if(code>=0&&material>=0){indexes={code,material,quantity,qty,uom};break;}
       }
-    }
+      const output=[];let started=false;
+      for(let rowIndex=markerRow+1;rowIndex<rows.length;rowIndex++){
+        const source=rows[rowIndex]||[];
+        if(source.some(value=>normalized(value).includes('mdf bom')))break;
+        const get=(index,fallback)=>String(source[index>=0?index:fallback]??'').trim();
+        const code=normalizeMaterialCode(get(indexes?.code??-1,3));
+        const material=get(indexes?.material??-1,4);
+        const quantity=get(indexes?.quantity>=0?indexes.quantity:(indexes?.qty>=0?indexes.qty:-1),7);
+        const uom=get(indexes?.uom??-1,8);
+        if(!code&&!material&&!quantity&&!uom){if(started)break;continue;}
+        if(!code&&!material)continue;
+        started=true;
+        const title=[data.model,data.size,data.productType,'MDF'].filter(Boolean).join(' ').slice(0,40);
+        output.push([data.productType,'',title,String(title.length),'MTN3','N','1','1',code,material,formatComponentQuantity(quantity),uom,'MKA7','MKA7']);
+      }
+      return output;
+    };
+    for(const rows of sheets){const embedded=readEmbeddedMdf(rows);if(embedded.length)return embedded;}
     return [];
   }
   function inhouseReserveCount(data){return data?.mdfRows?.length?data.mdfRows.length+1:7;}
@@ -180,16 +194,16 @@
     return groups;
   }
   function activeTileVariants(){return currentGroups.map(group=>[group.name,tileCodes.get(group.name)]).filter(([,shortForm])=>Boolean(shortForm));}
-  function componentValues(item){
+  function componentValues(item,{allowQtyFallback=true}={}){
     if(!item)return {partNumber:'',material:'',quantity:'',uom:''};
     const isNumber=value=>/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(value??'').trim().replace(/,/g,''));
     const rawQuantity=item.quantity??item.qty??'';
-    const quantity=isNumber(item.nesting)?item.nesting.trim():isNumber(rawQuantity)?String(rawQuantity).trim():'';
+    const quantity=isNumber(item.nesting)?item.nesting.trim():allowQtyFallback&&isNumber(rawQuantity)?String(rawQuantity).trim():'';
     let uom=String(item.uom??'').trim();if(!uom||/^(?:-|hardware bom|child bom)$/i.test(uom))uom=/nut/i.test(`${item.partName} ${item.material}`)?'N':'';
     return {partNumber:item.partNumber,material:item.material,quantity,uom};
   }
   function inhouseRow(data,description,component={},rowProductType=data.productType){
-    const title=String(description??'').slice(0,40),values=componentValues(component);
+    const title=String(description??'').slice(0,40),values=componentValues(component,{allowQtyFallback:false});
     const plant=/corrugated box/i.test(`${description} ${component.partName??''} ${component.material??''} ${component.description??''}`)?'MTN2':'MKA7';
     const row=[rowProductType,'',title,String(title.length),plant,'N','1','1',values.partNumber,values.material,formatComponentQuantity(values.quantity),values.uom,'MKA7','MKA7'];
     if(component.formulaTarget)row.inhouseFormulaTarget=component.formulaTarget;
@@ -218,12 +232,15 @@
     const sourceTileName=tileSource?[...tileCodes.keys()].sort((a,b)=>b.length-a.length).find(name=>normalized(`${tileSource.material} ${tileSource.description} ${tileSource.partName}`).includes(normalized(name))):'';
     const tileCutMatch=tileSource?.description.match(/(\d{3,4})\s*[x×]\s*(\d{3,4})/i),tileCutSize=tileCutMatch?`${tileCutMatch[1]}x${tileCutMatch[2]}`:'';
     const pasteEntries=inhouseTagged.filter(entry=>/araldite|pasting|adhesive/i.test(entry.text));
-    const frameEntries=inhouseTagged.filter(entry=>/^2[ab]/i.test(entry.item.serial)||/\bleg\b|top plate/i.test(entry.item.partName));
-    const powderEntries=inhouseTagged.filter(entry=>/^2[cd]/i.test(entry.item.serial)||/powder|\bdiesel\b|coating/i.test(entry.text));
+    const hasComponentData=entry=>Boolean(entry.item.partNumber||entry.item.material||entry.item.description);
+    const isPowderEntry=entry=>/powder|\bpow\b|\bdiesel\b|coating/i.test(entry.text);
+    const frameEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!isPowderEntry(entry)&&(/^2[a-z]/i.test(entry.item.serial)||/\bleg\b|top plate|side sheet|side cover|square rod/i.test(entry.text)));
+    const powderEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&isPowderEntry(entry));
     const excluded=new Set([...nutEntries,...tileEntries,...pasteEntries,...frameEntries,...powderEntries]);
-    const genericEntries=inhouseTagged.filter(entry=>!excluded.has(entry)&&!/\bmdf\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
+    const genericEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!excluded.has(entry)&&!/\bmdf\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
     const packagingRelatedEntries=genericEntries.filter(entry=>/packag|plywood|plyboard|crate|corrugated|carton|stretch|bubble|foam|thermocol|epe|bopp|tape|ldpe|polyethylene|polythene|wrap|film|\bnails?\b|\bbox\b/i.test(entry.text));
     const packagingEntries=packagingRelatedEntries.filter(entry=>/plywood|plyboard|crate|corrugated/i.test(entry.text));
+    const remainingPackagingEntries=packagingRelatedEntries.filter(entry=>!packagingEntries.includes(entry));
     const otherEntries=genericEntries.filter(entry=>!packagingRelatedEntries.includes(entry));
     const groups=[];
     data.inhouseMissingTileData=[];
@@ -275,6 +292,7 @@
       if(plywoodEntries.length)groups.push(inhouseGroup('Plywood Crate',componentRows(plywoodEntries)));
       const boxRows=componentRows(corrugatedEntries);
       if(boxRows.length)groups.push(inhouseGroup(corrugatedEntries.length?'Corrugated Box':'Packaging',boxRows));
+      for(const entry of remainingPackagingEntries){const desc=(entry.item.partName||entry.item.material||entry.item.description||`Component ${entry.item.serial}`).slice(0,40);groups.push(inhouseGroup(desc,[inhouseRow(data,desc,entry.item)]));}
       for(const variant of variants){if(sourceVariant&&variant===sourceVariant)continue;addTileVariant(...variant);}
       data.inhouseMissingTileData=[...new Set(data.inhouseMissingTileData)];
     }else{
@@ -327,6 +345,7 @@
   }
   function hasChildBomMarker(item){return Object.values(item||{}).some(value=>/\bchild\s*bom\b/i.test(String(value??'')));}
   function childBoxNumber(item){const match=String(item?.serial||'').match(/^B\s*(\d+)$/i);return match?Number(match[1]):0;}
+  function childItemBoxNumber(item){const text=normalized(item?.nesting||''),group=text.match(/\bgroup\s*(\d+)\b/);return group?Number(group[1]):childBoxNumber(item)||1;}
   function childInhouseRowNumber(groupIndex,rowIndex){let row=2+inhouseReserveCount(currentData);for(let index=0;index<groupIndex;index++)row+=currentInhouseGroups[index].rows.length+1;return row+rowIndex;}
   function childInhouseRouteForItem(item){
     const partCode=String(item?.partNumber||'').trim(),material=normalized(item?.material||'');
@@ -418,7 +437,7 @@
           addRoute(childFindPackagingRoute(boxNumber,/corrugated/i),'Inhouse BOM',`Box ${boxNumber}`);
         }
         for(const item of childBoxItems(data,boxNumber))if(sourceHasData(item))section.push({row:['','','MKA7','1','1',item.partNumber||'',childSourceDescription(item),childSourceQuantity(item),String(item.uom||'').trim()]});
-        if(boxNumber===1)for(const item of markedItems)if(sourceHasData(item))section.push({row:['','','MKA7','1','1',item.partNumber||'',childSourceDescription(item),childSourceQuantity(item),String(item.uom||'').trim()]});
+        for(const item of markedItems)if(childItemBoxNumber(item)===boxNumber&&sourceHasData(item))section.push({row:['','','MKA7','1','1',item.partNumber||'',childSourceDescription(item),childSourceQuantity(item),String(item.uom||'').trim()]});
         section.forEach((entry,index)=>{
           entry.row[1]=group.rows[boxIndex]?.[6]||'';
           entry.formula={...entry.formula,1:index===0?`'Summary BOM Sheet'!G${summaryRow}`:`B${output.length+1}`};
@@ -584,7 +603,7 @@
       const workbooks=await Promise.all(selected.map(async file=>readWorkbook(await file.arrayBuffer()))),sheets=workbooks.flat();
       const data=extractData(sheets);
       const mdfTitle=[data.model,data.size,data.productType,'MDF'].filter(Boolean).join(' ').slice(0,40);
-      data.mdfRows=extractMdfRows(sheets).map(row=>{const titledRow=[...row];titledRow[2]=mdfTitle;titledRow[3]=String(mdfTitle.length);return titledRow;});
+      data.mdfRows=extractMdfRows(sheets,data).map(row=>{const titledRow=[...row];titledRow[2]=mdfTitle;titledRow[3]=String(mdfTitle.length);titledRow[4]='MTN3';return titledRow;});
       data.inhouseHasMdf=true;currentModel=data.model;currentData=data;removedTileNames.clear();currentGroups=makeGroups(data);render(data,currentGroups);renderHardware(data);renderInhouse(data,activeTileVariants());renderChild(data);status.textContent='';
     }
     catch(error){currentGroups=[];status.classList.add('error');status.textContent=error?.message||'Unable to process this workbook.';}
