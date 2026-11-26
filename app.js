@@ -256,6 +256,7 @@
     const genericEntries=inhouseTagged.filter(entry=>hasComponentData(entry)&&!excluded.has(entry)&&!/\bmdf\b/i.test(entry.text)&&!/hardware bom/i.test(entry.nesting)&&!/^[A-Z]$/.test(entry.item.serial));
     const packagingRelatedEntries=genericEntries.filter(entry=>/packag|plywood|plyboard|crate|corrugated|carton|stretch|bubble|foam|thermocol|epe|bopp|tape|ldpe|polyethylene|polythene|wrap|film|\bnails?\b|\bbox\b/i.test(entry.text));
     const packagingEntries=packagingRelatedEntries.filter(entry=>/plywood|plyboard|crate|corrugated/i.test(entry.text));
+    const remainingPackagingEntries=packagingRelatedEntries.filter(entry=>!packagingEntries.includes(entry));
     const otherEntries=genericEntries.filter(entry=>!packagingRelatedEntries.includes(entry));
     const groups=[];
     data.inhouseMissingTileData=[];
@@ -307,6 +308,7 @@
       if(plywoodEntries.length)groups.push(inhouseGroup('Plywood Crate',componentRows(plywoodEntries)));
       const boxRows=componentRows(corrugatedEntries);
       if(boxRows.length)groups.push(inhouseGroup(corrugatedEntries.length?'Corrugated Box':'Packaging',boxRows));
+      for(const entry of remainingPackagingEntries){const desc=(entry.item.partName||entry.item.material||entry.item.description||`Component ${entry.item.serial}`).slice(0,40);groups.push(inhouseGroup(desc,[inhouseRow(data,desc,entry.item)]));}
       for(const variant of variants){if(sourceVariant&&variant===sourceVariant)continue;addTileVariant(...variant);}
       data.inhouseMissingTileData=[...new Set(data.inhouseMissingTileData)];
     }else{
